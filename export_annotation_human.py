@@ -68,11 +68,8 @@ if __name__ == '__main__':
             current_path, os.path.join(args.output_dir, 'scene.blend'), args.output_dir)
         os.system(obj_script)
     if args.export_tracking:
-        tracking_script = 'python -m utils.gen_tracking --data_root {} --sampling_points {} --visualize_points {}'.format(
-            args.output_dir, args.sampling_points, args.vis_num)
-        os.system(tracking_script)
-        tracking_script = 'python -m utils.gen_tracking_ground --data_root {} --sampling_points {} --visualize_points {}'.format(
-            args.output_dir, args.sampling_scene_points, args.vis_num)
+        tracking_script = 'python -m utils.gen_tracking --data_root {} --sampling_points {} --visualize_points {} --sampling_scene_points {}'.format(
+            args.output_dir, args.sampling_points, args.vis_num, args.sampling_scene_points)
         os.system(tracking_script)
 
     # rm redundant files

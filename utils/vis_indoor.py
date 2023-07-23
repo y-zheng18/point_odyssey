@@ -94,12 +94,6 @@ def summ_traj2ds_on_rgbs(data_root, sample_points=1000, S=16, linewidth=1, show_
     save_root = os.path.join(data_root, 'traj1')
 
     os.makedirs(save_root, exist_ok=True)
-    # trajs_path = os.path.join(data_root, 'ground_truth')
-    # trajs = []
-    # for i in range(frame_idx, frame_end):
-    #     traj = np.load(os.path.join(trajs_path, '%05d.npy' % (i + 1)))
-    #     trajs.append(traj)
-    # trajs = np.stack(trajs, axis=0)
     trajs = np.load(os.path.join(data_root, 'tracking_results.npy'))[frame_idx:frame_end]
     if os.path.exists(os.path.join(data_root, 'tracking_ground_results.npy')):
         print('adding ground points')
@@ -118,11 +112,7 @@ def summ_traj2ds_on_rgbs(data_root, sample_points=1000, S=16, linewidth=1, show_
     S2, N, D = trajs.shape
     print('vis points on frame 0', trajs.shape)
 
-    # sample_idx = np.linspace(0, N - 1, sample_points).astype(np.int32)
     _, sample_idx = farthest_point_sampling(trajs[0, :, :2], sample_points)
-
-
-    # print('valids', valids.shape)
 
     rgbs_color = []
 
@@ -143,8 +133,6 @@ def summ_traj2ds_on_rgbs(data_root, sample_points=1000, S=16, linewidth=1, show_
         traj = trajs[:, point_id].astype(np.int32)  # S, 2
         valid = valids[:, point_id]  # S,
 
-        # print('traj', traj.shape)
-        # print('valid', valid.shape)
         print('saving traj %d' % point_id)
         for t in range(S2):
             if valid[t]:
