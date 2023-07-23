@@ -72,8 +72,8 @@ if __name__ == '__main__':
             args.output_dir, args.sampling_points, args.vis_num, args.sampling_scene_points)
         os.system(tracking_script)
 
-    # rm redundant files
-    current_path = os.path.dirname(os.path.realpath(__file__))
-    output_dir_abs = os.path.abspath(args.output_dir)
-    os.system('cd {} && rm -rf ./*.blend1 && rm -r exr && rm -r tmp'.format(output_dir_abs))
-    os.system('cd {}'.format(current_path))
+    # # rm redundant files
+    # current_path = os.path.dirname(os.path.realpath(__file__))
+    # output_dir_abs = os.path.abspath(args.output_dir)
+    # os.system('cd {} && rm -rf ./*.blend1 && rm -r exr && rm -r tmp'.format(output_dir_abs))
+    # os.system('cd {}'.format(current_path))

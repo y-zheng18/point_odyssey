@@ -162,3 +162,5 @@ cython_debug/
 .DS*
 
 data/
+
+results/

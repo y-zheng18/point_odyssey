@@ -208,7 +208,8 @@ class Blender_render():
                  add_smoke: bool = False,
                  force_step: int = 3,
                  force_num: int = 3,
-                 force_interval: int = 200
+                 force_interval: int = 200,
+                 views=1,
                  ):
         self.blender_scene = bpy.context.scene
         self.render_engine = render_engine
@@ -254,6 +255,7 @@ class Blender_render():
         self.samples_per_pixel = samples_per_pixel
 
         self.exr_output_node = self.set_up_exr_output_node()
+        self.views = views
 
         # self.blender_scene.render.resolution_percentage = 100
         if background_hdr_path:
@@ -477,13 +479,6 @@ class Blender_render():
             bpy.context.object.modifiers['Fluid'].domain_settings.use_adaptive_domain = True
             bpy.context.object.modifiers['Fluid'].domain_settings.cache_frame_start = 1
             bpy.context.object.modifiers['Fluid'].domain_settings.cache_frame_end = bpy.context.scene.frame_end
-            # change the position of the smoke
-            # bpy.context.object.location = (np.random.uniform(-self.scale_factor * 2, self.scale_factor * 2),
-            #                                np.random.uniform(-self.scale_factor * 2, self.scale_factor * 2),
-            #                                np.random.uniform(0, self.scale_factor * 2))
-            # bpy.context.object.rotation_euler = (np.random.uniform(0, np.pi / 2),
-            #                                      np.random.uniform(0, np.pi / 2),
-            #                                      np.random.uniform(0, np.pi / 2))
 
         # add objects
         GSO_assets = os.listdir(self.GSO_path)
@@ -816,94 +811,9 @@ class Blender_render():
                     for keyframe in keyframe_points:
                         keyframe.interpolation = 'LINEAR'
 
-    def render(self):
-        """Renders all frames (or a subset) of the animation.
-        """
-        print("Using scratch rendering folder: '%s'" % self.scratch_dir)
-        # setup rigid world cache
-        bpy.context.scene.rigidbody_world.point_cache.frame_start = 1
-        bpy.context.scene.rigidbody_world.point_cache.frame_end = bpy.context.scene.frame_end + 1
-        bpy.context.view_layer.objects.active = self.assets_set[0]
-
-        self.set_exr_output_path(os.path.join(self.scratch_dir, "exr", "frame_"))
-        # --- starts rendering
-        camera_save_dir = os.path.join(self.scratch_dir, 'cam')
-        obj_save_dir = os.path.join(self.scratch_dir, 'obj')
-        os.makedirs(camera_save_dir, exist_ok=True)
-        os.makedirs(obj_save_dir, exist_ok=True)
-
-        camdata = self.camera.data
-        focal = camdata.lens  # mm
-        sensor_width = camdata.sensor_width  # mm
-        sensor_height = camdata.sensor_height  # mm
-        scene_info = {'sensor_width': sensor_width, 'sensor_height': sensor_height, 'focal_length': focal,
-                      'assets': ['background']}
-        scene_info['assets'] += [x.data.name for x in self.assets_set]
-        scene_info['character'] = self.animal.name
-        json.dump(scene_info, open(os.path.join(self.scratch_dir, 'scene_info.json'), 'w'))
-
-        self.set_render_engine()
-        self.clear_scene()
-
-        frames = range(bpy.context.scene.frame_start, bpy.context.scene.frame_end + 1)
-
-        absolute_path = os.path.abspath(self.scratch_dir)
-
-        # add forces
-        for frame_nr in frames:
-            if frame_nr % self.force_interval == 1 and self.add_force:
-                # add keyframe to force strength
-                bpy.context.scene.frame_set(frame_nr)
-                force_loc_list = np.random.uniform(np.array([-16, -16, -3]), np.array([16, 16, 0]),
-                                                size=(self.num_assets * 50, 3)) * self.scale_factor
-                force_loc_list = self.farthest_point_sampling(force_loc_list, self.force_num)
-                print('force_loc_list', force_loc_list)
-                for i in range(len(self.gso_force)):
-                    force_source = self.gso_force[i]
-                    # select obj
-                    force_source.field.strength = np.random.uniform(500, 1000) * self.scale_factor
-                    force_source.field.distance_max = 1000
-                    force_loc_list[i][2] *= 5
-                    force_source.location = force_loc_list[i]
-                    force_source.keyframe_insert(data_path='location', frame=frame_nr)
-                    force_source.keyframe_insert(data_path='location', frame=frame_nr + self.force_interval - 1)
-                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr)
-                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_step - 1)
-                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr)
-                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr + self.force_step - 1)
-                    force_source.field.strength *= 0  # disable force
-                    force_source.field.distance_max *= 0
-                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_step)
-                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_interval - 1)
-                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr + self.force_step)
-                    force_source.keyframe_insert(data_path='field.distance_max',
-                                                 frame=frame_nr + self.force_interval - 1)
-
-        # bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene1.blend'))
-        # bake rigid body simulation
-
-        bpy.ops.object.select_all(action='SELECT')
-        bpy.context.view_layer.objects.active = self.assets_set[0]
-        print('start baking')
-        self.bake_to_keyframes(frames[0], frames[-1], 1)
-        print('baking done')
-        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
-
-        # set camera poses from real camera trajectory
-
-
-        camera_files = glob.glob(os.path.join(self.camera_path, '*/*.txt'))
-        # filter out small files
-        camera_files = [c for c in camera_files if os.path.getsize(c) > 5000]
-        camera_file = np.random.choice(camera_files)
-        print('camera file: ', camera_file)
-        camera_rt = np.loadtxt(camera_file, skiprows=1)[:, 7:].reshape(-1, 3, 4)
+    def bake_camera(self, camera_rt, frames):
         self.camera_T = -camera_rt[:, :3, :3].transpose((0, 2, 1)) @ camera_rt[:, :3, 3:]
 
-
-        # normalize camera trajectory to capture the character
-        # self.camera_T /= np.std(self.camera_T, axis=1, keepdims=True)
-        # self.camera_T /= 2\
         xy_min = np.min(self.camera_T[:, :2], axis=0)
         xy_max = np.max(self.camera_T[:, :2], axis=0)
         xy_length = np.max(np.abs(xy_max - xy_min))
@@ -959,31 +869,155 @@ class Blender_render():
             bpy.context.scene.camera.keyframe_insert(data_path="location", frame=frame_next)
             bpy.context.scene.camera.keyframe_insert(data_path="rotation_euler", frame=frame_next)
 
-        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
+    def render(self):
+        """Renders all frames (or a subset) of the animation.
+        """
+        print("Using scratch rendering folder: '%s'" % self.scratch_dir)
+        # setup rigid world cache
+        bpy.context.scene.rigidbody_world.point_cache.frame_start = 1
+        bpy.context.scene.rigidbody_world.point_cache.frame_end = bpy.context.scene.frame_end + 1
+        bpy.context.view_layer.objects.active = self.assets_set[0]
+
+        self.set_exr_output_path(os.path.join(self.scratch_dir, "exr", "frame_"))
+
+        self.set_render_engine()
+        self.clear_scene()
+
+        absolute_path = os.path.abspath(self.scratch_dir)
+
+        camdata = self.camera.data
+        focal = camdata.lens  # mm
+        sensor_width = camdata.sensor_width  # mm
+        sensor_height = camdata.sensor_height  # mm
+        scene_info = {'sensor_width': sensor_width, 'sensor_height': sensor_height, 'focal_length': focal,
+                      'assets': ['background']}
+        scene_info['assets'] += [x.data.name for x in self.assets_set]
+        scene_info['character'] = self.animal.name
+        json.dump(scene_info, open(os.path.join(self.scratch_dir, 'scene_info.json'), 'w'))
+
+        frames = range(bpy.context.scene.frame_start, bpy.context.scene.frame_end + 1)
+
+        # add forces
         for frame_nr in frames:
-            bpy.context.scene.frame_set(frame_nr)
+            if frame_nr % self.force_interval == 1 and self.add_force:
+                # add keyframe to force strength
+                bpy.context.scene.frame_set(frame_nr)
+                force_loc_list = np.random.uniform(np.array([-16, -16, -3]), np.array([16, 16, 0]),
+                                                   size=(self.num_assets * 50, 3)) * self.scale_factor
+                force_loc_list = self.farthest_point_sampling(force_loc_list, self.force_num)
+                print('force_loc_list', force_loc_list)
+                for i in range(len(self.gso_force)):
+                    force_source = self.gso_force[i]
+                    # select obj
+                    force_source.field.strength = np.random.uniform(500, 1000) * self.scale_factor
+                    force_source.field.distance_max = 1000
+                    force_loc_list[i][2] *= 5
+                    force_source.location = force_loc_list[i]
+                    force_source.keyframe_insert(data_path='location', frame=frame_nr)
+                    force_source.keyframe_insert(data_path='location', frame=frame_nr + self.force_interval - 1)
+                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr)
+                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_step - 1)
+                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr)
+                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr + self.force_step - 1)
+                    force_source.field.strength *= 0  # disable force
+                    force_source.field.distance_max *= 0
+                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_step)
+                    force_source.keyframe_insert(data_path='field.strength', frame=frame_nr + self.force_interval - 1)
+                    force_source.keyframe_insert(data_path='field.distance_max', frame=frame_nr + self.force_step)
+                    force_source.keyframe_insert(data_path='field.distance_max',
+                                                 frame=frame_nr + self.force_interval - 1)
+        bpy.ops.object.select_all(action='SELECT')
+        bpy.context.view_layer.objects.active = self.assets_set[0]
+        print('start baking')
+        self.bake_to_keyframes(frames[0], frames[-1], 1)
+        print('baking done')
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
 
-            bpy.context.scene.render.filepath = os.path.join(
-                self.scratch_dir, "images", f"frame_{frame_nr:04d}.png")
+        # --- starts rendering
+        camera_save_dir = os.path.join(self.scratch_dir, 'cam')
+        obj_save_dir = os.path.join(self.scratch_dir, 'obj')
+        os.makedirs(camera_save_dir, exist_ok=True)
+        os.makedirs(obj_save_dir, exist_ok=True)
 
-            bpy.ops.render.render(animation=False, write_still=True)
-            # for asset in self.assets_set:
-            #     if not asset.data.name in bpy.data.objects.keys():
-            #         continue
-            #     bpy.data.objects[asset.data.name].select_set(True)
-            #     save_asset_name = asset.data.name.replace('.', '_')
-            #     bpy.ops.export_scene.obj(filepath=os.path.join(obj_save_dir, f'{save_asset_name}_{frame_nr:04d}.obj'),
-            #                              use_selection=True , use_mesh_modifiers=True,
-            #                              use_normals=False, use_uvs=False, use_triangles=False,
-            #                              keep_vertex_order=True, use_materials=False)
-            #     bpy.data.objects[asset.data.name].select_set(False)
-            modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
-            K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
-            # K = get_intrinsics(bpy.context.scene)
-            np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
-            np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
-            print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
+        use_multiview = self.views > 1
 
+        if not use_multiview:
+            # set camera poses from real camera trajectory
+            camera_files = glob.glob(os.path.join(self.camera_path, '*/*.txt'))
+            # filter out small files
+            camera_files = [c for c in camera_files if os.path.getsize(c) > 5000]
+            camera_file = np.random.choice(camera_files)
+            print('camera file: ', camera_file)
+            camera_rt = np.loadtxt(camera_file, skiprows=1)[:, 7:].reshape(-1, 3, 4)
+            self.bake_camera(camera_rt, frames)
+
+            bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
+            for frame_nr in frames:
+                bpy.context.scene.frame_set(frame_nr)
+
+                bpy.context.scene.render.filepath = os.path.join(
+                    self.scratch_dir, "images", f"frame_{frame_nr:04d}.png")
+
+                bpy.ops.render.render(animation=False, write_still=True)
+
+                modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
+                K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
+
+                np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
+                np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
+                print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
+        else:
+            # set camera poses from real camera trajectory
+            camera_files = glob.glob(os.path.join(self.camera_path, '*/*.txt'))
+            # filter out small files
+            camera_files = [c for c in camera_files if os.path.getsize(c) > 5000]
+            camera_files = np.random.choice(camera_files, self.views, replace=False)
+            print('camera files: ', camera_files)
+
+            self.camera_list = []
+            for i in range(self.views):
+                # create new cameras
+                bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0))
+                self.camera_list.append(bpy.context.object)
+
+                self.camera = self.camera_list[i]
+                bpy.context.scene.camera = self.camera
+
+                # setup camera
+                self.cam_loc = mathutils.Vector((np.random.uniform(-3, -3.5) * np.random.choice((-1, 1)),
+                                                 np.random.uniform(-3, -3.5) * np.random.choice((-1, 1)),
+                                                 np.random.uniform(1, 2.5))) * self.scale_factor
+                self.cam_lookat = mathutils.Vector((0, 0, 0.5)) * self.scale_factor
+                self.set_cam(self.cam_loc, self.cam_lookat)
+                self.camera.data.lens = FOCAL_LENGTH
+                self.camera.data.clip_end = 10000
+                self.camera.data.sensor_width = SENSOR_WIDTH
+
+                camera_file = camera_files[i]
+                camera_rt = np.loadtxt(camera_file, skiprows=1)[:, 7:].reshape(-1, 3, 4)
+                self.bake_camera(camera_rt, frames)
+
+            bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
+            for frame_nr in frames:
+                bpy.context.scene.frame_set(frame_nr)
+
+                for i in range(len(self.camera_list)):
+                    camera_save_dir = os.path.join(self.scratch_dir, 'cam', "view{}".format(i))
+                    if not os.path.exists(camera_save_dir):
+                        os.makedirs(camera_save_dir)
+                    bpy.context.scene.camera = self.camera_list[i]
+                    self.set_exr_output_path(os.path.join(self.scratch_dir, "view{}".format(i), "exr", "frame_"))
+                    bpy.context.scene.render.filepath = os.path.join(
+                        self.scratch_dir, "view{}".format(i), "images", f"frame_{frame_nr:04d}.png")
+
+                    bpy.ops.render.render(animation=False, write_still=True)
+
+                    modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
+                    K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
+
+                    np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
+                    np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
+                    print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
 
 
 def get_calibration_matrix_K_from_blender(scene, mode='simple'):
@@ -1072,11 +1106,12 @@ if __name__ == "__main__":
     parser.add_argument('--force_interval', type=int, default=120)
     parser.add_argument('--force_num', type=int, default=3)
     parser.add_argument('--add_force', action='store_true', default=False)
-    parser.add_argument('--num_assets', type=int, default=15)
+    parser.add_argument('--num_assets', type=int, default=5)
     parser.add_argument('--use_gpu', action='store_true', default=False)
     parser.add_argument('--indoor', action='store_true', default=False)
     parser.add_argument('--render_engine', type=str, default='CYCLES', choices=['BLENDER_EEVEE', 'CYCLES'])
     parser.add_argument('--add_smoke', action='store_true', default=False)
+    parser.add_argument('--views', default=1, type=int)
     args = parser.parse_args(argv)
     print("args:{0}".format(args))
 
@@ -1089,7 +1124,7 @@ if __name__ == "__main__":
                               camera_path=args.camera_root, background_hdr_path=args.background_hdr_path, GSO_path=args.gso_root, num_assets=args.num_assets,
                               custom_scene=args.scene_root, use_indoor_cam=args.indoor, partnet_path=args.partnet_root,
                               add_force=args.add_force, force_step=args.force_step, force_interval=args.force_interval, force_num=args.force_num,
-                              add_smoke=args.add_smoke)
+                              add_smoke=args.add_smoke, views=args.views)
 
     renderer.render()
 

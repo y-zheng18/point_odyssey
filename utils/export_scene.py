@@ -15,8 +15,8 @@ else:
 print("argsv:{0}".format(argv))
 parser = argparse.ArgumentParser(description='Export obj data')
 
-parser.add_argument('--scene_root', type=str, default='/Users/yangzheng/code/project/long-term-tracking/data/scenes/bedroom0210_human1.blend')
-parser.add_argument('--output_dir', type=str, metavar='PATH', default='/Users/yangzheng/code/project/long-term-tracking/data/scenes/render0',
+parser.add_argument('--scene_root', type=str, default='')
+parser.add_argument('--output_dir', type=str, metavar='PATH', default='',
                     help='obj save dir')
 parser.add_argument('--export_character', type=bool, default=True)
 args = parser.parse_args(argv)

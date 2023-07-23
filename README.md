@@ -1,12 +1,12 @@
-# PixelOdyssey: A Large-Scale Synthetic Dataset for Long-Term Pixel Tracking
+# PointOdyssey: A Large-Scale Synthetic Dataset for Long-Term Point Tracking
 ![teaser](assets/teaser.gif)
 
-This code implements the data generation pipeline of our PixelOdyssey dataset (pre-released version).
+This code implements the data generation pipeline of our PointOdyssey dataset (pre-released version).
 ## Introduction
-The codebase is built upon Blender 3.1+ and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To setup the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
+The codebase is built upon Blender 3.1+, and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To setup the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
 ```angular2html
-conda create -n pixel python=3.9
-conda activate pixel
+conda create -n point python=3.9
+conda activate point
 pip install -r requirements.txt
 ```
 And install OpenEXR by running:
@@ -27,7 +27,7 @@ bash scripts/render_robot.sh
 ```
 You will find the rendered images in ```results/robot/```, including RGB images, depth maps, segmentation maps, and normal maps, as shown below:
 ![robot](assets/demo.gif)
-If your machine has GPU, set ```--use_gpu``` in the scripts to accelerate rendering.
+If GPU is available on your machine, set ```--use_gpu``` in the scripts to accelerate rendering.
 ## Generating Outdoor Data
 This codebase supports generating outdoor scenes with deformable objects interacting with the environment. 
 To generate outdoor data, you will need:
@@ -48,6 +48,8 @@ bash scripts/render_outdoor.sh
 You will find the rendered images in ```./results/outdoor/```, similar as shown below:
 
 <img src="assets/outdoor.gif" alt="outdoor" width="50%" height="50%">
+
+In our dataset, we also apply random forces to the objects in the scene to generate more diverse interactions. You can generate such data by adding ```--add_force --scene_root ./data/blender_assets/hdri.blend``` in the script.
 
 You can also utilize other deformable models such as animals for data generation. Here is an example of rendering a rabbit from [DeformingThings4D](https://github.com/rabbityl/DeformingThings4D):
 ```angular2html
@@ -103,3 +105,31 @@ We also support adding random fogs and randomizing textures to maximize the dive
 
 <img src="assets/randomized.png" alt="random" width="50%" height="50%">
 
+## Multi-view Data Generation
+The codebase supports generating multi-view data. For a quick start, run:
+```angular2html
+bash scripts/render_outdoor_multiview.sh
+```
+
+<img src="assets/outdoor_multiview.jpg" alt="random" width="80%" height="80%">
+
+In the above example, we render 3 views of an outdoor scene. You can also render more views by setting ```--views``` to a larger number. 
+We randomly sample camera trajectories from Mannequin Challenge dataset. You can also manually design camera trajectories to render more diverse views, or use other hand-crafted camera trajectories, by modifying the code in ```render_human.py```.
+
+For indoor scenes, we add static cameras to render multi-view images. By running:
+```angular2html
+bash scripts/render_indoor_multiview.sh
+```
+you will get multi-view data similar to this:
+
+<img src="assets/indoor_multiview.jpg" alt="retar" width="60%" height="60%">
+
+## Download
+
+The full dataset will be released soon. The dataset will include:
+* Multi-modal data (RGBs, depth maps, normal maps and segmentation masks)
+* Ground truth 2D trajectories, with visibility lables
+* Ground truth 3D trajectories
+* Camera parameters
+
+## Citation

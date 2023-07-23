@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Sequence, Union
 import random
 
 import bpy
+import mathutils
 
 class Blender_render():
     def __init__(self,
@@ -23,6 +24,7 @@ class Blender_render():
                  custom_scene: Optional[str] = None,
                  randomize=False,
                  material_path=None,
+                 views: int=1
                  ):
         self.blender_scene = bpy.context.scene
         self.render_engine = render_engine
@@ -32,6 +34,8 @@ class Blender_render():
         self.randomize = randomize
         self.material_path = material_path
         self.samples_per_pixel = samples_per_pixel
+
+        self.views = views
 
         self.set_render_engine()
 
@@ -362,21 +366,129 @@ class Blender_render():
         # set samples per pixel
         bpy.context.scene.cycles.samples = self.samples_per_pixel
         frames = range(frames[0], bpy.context.scene.frame_end + 1)
-        for frame_nr in frames:
-            bpy.context.scene.frame_set(frame_nr)
-            # When writing still images Blender doesn't append the frame number to the png path.
-            # (but for exr it does, so we only adjust the png path)
-            bpy.context.scene.render.filepath = os.path.join(
-                self.scratch_dir, "images", f"frame_{frame_nr:04d}.png")
-            bpy.ops.render.render(animation=False, write_still=True)
 
-            modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
-            K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
-            # K = get_intrinsics(bpy.context.scene)
-            np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
-            np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
+        use_multiview = self.views > 1
+        if not use_multiview:
+            for frame_nr in frames:
+                bpy.context.scene.frame_set(frame_nr)
+                # When writing still images Blender doesn't append the frame number to the png path.
+                # (but for exr it does, so we only adjust the png path)
+                bpy.context.scene.render.filepath = os.path.join(
+                    self.scratch_dir, "images", f"frame_{frame_nr:04d}.png")
+                bpy.ops.render.render(animation=False, write_still=True)
 
-            print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
+                modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
+                K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
+                # K = get_intrinsics(bpy.context.scene)
+                np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
+                np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
+
+                print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
+        else:
+            self.camera_list = []
+            self.camera_list.append(bpy.context.scene.camera)
+
+            # find the bounding box of the wall collection
+            wall_collection = bpy.data.collections['Wall']
+
+            # find character collections
+            static_keys = ['Floor', 'Ceiling', 'Wall', 'Furniture']
+            character_collections = [bpy.data.collections[key] for key in bpy.data.collections.keys() if key not in static_keys]
+            print('Found characters:', character_collections)
+
+
+            for i in range(self.views):
+                bpy.ops.object.camera_add(enter_editmode=False, align='VIEW', location=(0, 0, 0), rotation=(0, 0, 0))
+                self.camera_list.append(bpy.context.object)
+
+                self.camera = self.camera_list[i + 1]
+                bpy.context.scene.camera = self.camera
+
+                self.camera.data.lens = focal
+                self.camera.data.clip_end = 10000
+                self.camera.data.sensor_width = sensor_width
+                self.camera.data.sensor_height = sensor_height
+
+                wall_objects = [obj for obj in wall_collection.objects if obj.type == 'MESH']
+
+                random_wall = np.random.choice(wall_objects)
+                print('random wall:', random_wall)
+                # apply all transformations to the chosen wall
+                bpy.context.view_layer.objects.active = random_wall
+                random_wall.select_set(True)
+                bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+                # get the vertices of the wall
+                vertices = [vert.co for vert in random_wall.data.vertices]
+                vertices = np.stack(vertices, axis=0)
+
+                v_min = np.min(vertices, axis=0)
+                v_max = np.max(vertices, axis=0)
+                print('wall min:', v_min)
+                print('wall max:', v_max)
+                cam_position = mathutils.Vector((np.random.uniform(v_min[0], v_max[0]),
+                                                 np.random.uniform(v_min[1], v_max[1]),
+                                                 np.random.uniform(v_max[2] * 0.8, v_max[2])))
+                cam_position = cam_position * np.random.uniform(0.6, 0.7)
+
+                self.camera.location = cam_position
+                print('baking camera %d' % i)
+                for f in frames:
+                    bpy.context.scene.frame_set(f)
+
+                    if not f % 50 == 0:
+                        continue
+
+                    # find the center of the characters
+                    bbox_corners = []
+
+                    # Loop over all mesh objects in each collection
+                    for c in character_collections:
+                        for obj in c.objects:
+                            if obj.type == 'MESH':
+                                # Compute bounding box (in world coordinates)
+                                bbox_corners += [obj.matrix_world @ mathutils.Vector(v) for v in obj.bound_box]
+
+                    # Convert to numpy array
+                    bbox_corners = np.array(bbox_corners)
+                    bbox_corners = np.reshape(bbox_corners, (-1, 3))
+
+                    bbox_center = np.mean(bbox_corners, axis=0)
+                    cam_lookat = mathutils.Vector(bbox_center)
+
+                    direction = cam_lookat - cam_position
+                    rot_quat = direction.to_track_quat('-Z', 'Y')
+                    self.camera.rotation_euler = rot_quat.to_euler()
+
+                    # add camera lcoation and rotation keyframe
+                    bpy.context.scene.camera.keyframe_insert(data_path="location", frame=f)
+                    bpy.context.scene.camera.keyframe_insert(data_path="rotation_euler", frame=f)
+
+            absolute_path = os.path.abspath(self.scratch_dir)
+            bpy.ops.wm.save_as_mainfile(filepath=os.path.join(absolute_path, 'scene.blend'))
+            for frame_nr in frames:
+                bpy.context.scene.frame_set(frame_nr)
+
+                for i in range(len(self.camera_list)):
+                    camera_save_dir = os.path.join(self.scratch_dir, 'cam', "surveil_{}".format(i) if i else "handcrafted")
+                    if not os.path.exists(camera_save_dir):
+                        os.makedirs(camera_save_dir)
+                    bpy.context.scene.camera = self.camera_list[i]
+                    self.set_exr_output_path(os.path.join(self.scratch_dir, "surveil_{}".format(i) if i else "handcrafted", "exr", "frame_"))
+                    bpy.context.scene.render.filepath = os.path.join(
+                        self.scratch_dir, "surveil_{}".format(i) if i else "handcrafted", "images", f"frame_{frame_nr:04d}.png")
+
+                    bpy.ops.render.render(animation=False, write_still=True)
+
+                    modelview_matrix = bpy.context.scene.camera.matrix_world.inverted()
+                    K = get_calibration_matrix_K_from_blender(bpy.context.scene, mode='simple')
+
+                    np.savetxt(os.path.join(camera_save_dir, f"RT_{frame_nr:04d}.txt"), modelview_matrix)
+                    np.savetxt(os.path.join(camera_save_dir, f"K_{frame_nr:04d}.txt"), K)
+                    print("Rendered frame '%s'" % bpy.context.scene.render.filepath)
+
+
+
 
 
 def get_calibration_matrix_K_from_blender(scene, mode='simple'):
@@ -477,6 +589,7 @@ if __name__ == "__main__":
     parser.add_argument('--fog_path', default=None, type=str)
     parser.add_argument('--randomize', default=False, action='store_true')
     parser.add_argument('--material_path', default=None, type=str)
+    parser.add_argument('--views', default=1, type=int)
     args = parser.parse_args(argv)
     print("args:{0}".format(args))
 
@@ -487,7 +600,8 @@ if __name__ == "__main__":
 
     renderer = Blender_render(scratch_dir=output_dir, render_engine=args.render_engine, custom_scene=blender_file, use_gpu=args.use_gpu,
                               background_hdr_path=args.background_hdr_path, samples_per_pixel=args.samples_per_pixel, add_fog=args.add_fog,
-                              fog_path=args.fog_path, randomize=args.randomize, material_path=args.material_path)
+                              fog_path=args.fog_path, randomize=args.randomize, material_path=args.material_path,
+                              views=args.views)
 
     frames = range(args.start_frame, args.end_frame)
     renderer.render(frames)

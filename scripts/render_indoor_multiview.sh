@@ -1,0 +1,1 @@
+blender --background --python ./render_single.py -- --output_dir ./results/robot_3views --scene ./data/demo_scene/robot.blend --views 3
