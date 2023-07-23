@@ -499,6 +499,7 @@ class Blender_render():
     def retarget_smplx2skeleton(self, mapping):
         # get source motion
         motion_dataset = np.random.choice(self.motion_dataset)
+        print('sampling motions from {}/{}'.format(self.motion_path, motion_dataset))
         # find all the npz file in the folder recursively
         motion_files = glob.glob(os.path.join(self.motion_path, motion_dataset, '**/*.npz'), recursive=True)
         motion_files = [f for f in motion_files]
