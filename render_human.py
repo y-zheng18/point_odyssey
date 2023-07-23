@@ -60,7 +60,7 @@ class Blender_render():
         self.motion_path = motion_path
         self.GSO_path = GSO_path
         self.camera_path = camera_path
-        self.motion_dataset = ['TotalCapture', 'DanceDB', 'CMU', 'MoSh', 'SFU']
+        self.motion_dataset = ['CMU'] # ['TotalCapture', 'DanceDB', 'CMU', 'MoSh', 'SFU']
         self.motion_speed = {'TotalCapture': 1 / 1.5, 'DanceDB': 1.0, 'CMU': 1.0, 'MoSh': 1.0 / 1.2, 'SFU': 1.0 / 1.2}
 
         self.force_step = force_step
