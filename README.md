@@ -24,7 +24,7 @@ The data generation pipeline also depends on some addons of Blender, including:
 Please install the addons following the instructions on their websites. If you are using Linux, make sure the addons are available in ```~/.config/blender/$VERSION/scripts/addons```.
 
 ## Quick Start
-To generate a demo data, simply run:
+For a quick start, download the demo data [here](https://drive.google.com/file/d/1ZKHjX5A1eiwrvPKZsoagficX8huFvMlE/view?usp=sharing) and run:
 ```angular2html
 bash scripts/render_robot.sh
 ```
