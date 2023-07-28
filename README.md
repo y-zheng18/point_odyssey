@@ -6,7 +6,7 @@ This code implements the data generation pipeline of our PointOdyssey dataset.
 **[[Paper](https://arxiv.org/abs/2307.15055)] [[Project Page](https://pointodyssey.com/)]**
 
 ## Introduction
-The codebase is built upon Blender 3.1+, and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To setup the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
+The codebase is built on Blender 3.1+, and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To set up the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
 ```angular2html
 conda create -n point python=3.9
 conda activate point
@@ -29,10 +29,13 @@ To generate a demo data, simply run:
 bash scripts/render_robot.sh
 ```
 You will find the rendered images in ```results/robot/```, including RGB images, depth maps, segmentation maps, and normal maps, as shown below:
+
 ![robot](assets/demo.gif)
-If GPU is available on your machine, set ```--use_gpu``` in the scripts to accelerate rendering.
+
+If a GPU is available on your machine, set ```--use_gpu``` in the scripts to accelerate rendering.
+
 ## Generating Outdoor Data
-This codebase supports generating outdoor scenes with deformable objects interacting with the environment. 
+The codebase supports generating outdoor scenes with deformable objects interacting with the environment. 
 To generate outdoor data, you will need:
 * HDR environment maps (e.g. from [HDRI Haven](https://hdrihaven.com/))
 * Human motion data (e.g. from [AMASS](https://amass.is.tue.mpg.de/))
@@ -40,7 +43,7 @@ To generate outdoor data, you will need:
 * 3D models (from [PartNet](https://cs.stanford.edu/~kaichun/partnet/) and [GSO](https://research.google/resources/datasets/scanned-objects-google-research/))
 * Humanoid models (e.g., from [BlenderKit](https://www.blenderkit.com/) and [Mixamo](https://www.mixamo.com/))
 
-```./data``` folder shows the directory structure of the required assets. To generate your customized data, you will need to download AMASS data and put it into ```./data/motions``` (e.g., ```./data/motions/CMU/01/01_01_stageii.npz```). 
+The ```./data``` folder shows the directory structure of the required assets. To generate your customized data, you will need to download AMASS data and put it into ```./data/motions``` (e.g., ```./data/motions/CMU/01/01_01_stageii.npz```). 
 To enlarge the data diversity, you might also want to download the full dataset of GSO and PartNet.
 
 After preparing the assets, you can run the following command to render outdoor scenes:
@@ -48,7 +51,7 @@ After preparing the assets, you can run the following command to render outdoor 
 bash scripts/render_outdoor.sh
 ```
 
-You will find the rendered images in ```./results/outdoor/```, similar as shown below:
+You will find the rendered images in ```./results/outdoor/```, which should look similar to the video below:
 
 <img src="assets/outdoor.gif" alt="outdoor" width="50%" height="50%">
 
@@ -61,54 +64,57 @@ bash scripts/render_animal.sh
 Download the full [DeformingThings4D](https://github.com/rabbityl/DeformingThings4D) and put it into ```./data/deformingthings4d``` to render more data.
 
 ## Generating Indoor Data
-This part shows how to generate indoor scenes, featuring humanoids with environment-aware interactions. Some Blender skills are required to generate your own data.
 
-We utilize mocap data in real 3D environments and rebuild the scenes in Blender, to support more realistic interactions between humanoids and the scenes. 
-Specially, we use:
+In addition to outdoor scenes, we generate realistic indoor scenes, featuring humanoids with environment-aware interactions. To generate new scenes, you will need some skill with Blender. 
+
+We utilize mocap data from real 3D environments and rebuild the associated scenes in Blender, to support realistic interactions between humanoids and the scenes. Specifically, we use:
 * Human motions and 3D scene scans from [Egobody](https://sanweiliti.github.io/egobody/egobody.html) and [GIMO](https://github.com/y-zheng18/GIMO)
 * 3D furniture models from [BlenderKit](https://www.blenderkit.com/) and [3D-front](https://tianchi.aliyun.com/specials/promotion/alibaba-3d-scene-dataset)
 * Virtual humans from [Mixamo](https://www.mixamo.com/) and [Turbosquid](https://www.turbosquid.com/)
 
-We firstly rebuild 3D scenes using the 3D furnitures to replicate specific 3D environments from the real scans. 
+In our case, the first step is to rebuild 3D scenes using the downloaded 3D furniture, to replicate specific 3D environments from the real scans.
 Since the human motions from Egobody and GIMO are initially aligned with the scene scans, we can directly import the motions into Blender and render the data. 
-In the following, we show how to make your own data based on EgoBody dataset and characters from Mixamo.
+In the next section, we show how to make your own data based on EgoBody dataset and characters from Mixamo.
 
 ### Rebuilding 3D Scenes
-To rebuild 3D scenes, you can use [BlenderKit](https://www.blenderkit.com/) to import 3D furnitures in Blender to match the layout of 3D scans:
+To rebuild 3D scenes, you can use [BlenderKit](https://www.blenderkit.com/) to import 3D furniture in Blender to match the layout of 3D scans:
+
 ![rebuild](assets/rebuilt.jpg)
+
 ### Importing Human Motions
+
 Download the [Egobody](https://sanweiliti.github.io/egobody/egobody.html) dataset and put it into ```./data/egobody```. 
-Then run the following command to convert the motion data into Blender readable SMPL-X motions.
+Then, run the following command to convert the motion data into Blender readable SMPL-X motions.
 ```angular2html
 python -m utils.egobody2amass
 ```
-Download human characters from [Mixamo](https://www.mixamo.com/). Open the fbx file in Blender, rename the ```Armature``` as ```exo_gray``` (anything you want) and save the Blender file as ```exo_gray.blend``` in ```./data/characters```. 
-Then run the following command to retarget the motions.
+Download human characters from [Mixamo](https://www.mixamo.com/). Open the fbx file in Blender, rename the ```Armature``` as ```exo_gray``` (or another name you choose) and save the Blender file as ```exo_gray.blend``` in ```./data/characters```. 
+Then, run the following command to retarget the motions.
 ```angular2html
 blender --background --python ./utils/egobody_retargeting.py -- --seq recording_20210918_S05_S06_01
 ```
-You will get retargeted motions in ```./data/egobody/scenes/scene.blend```:
+This will produce retargeted motions in ```./data/egobody/scenes/scene.blend```:
 
 <img src="assets/retargetting.jpg" alt="retar" width="50%" height="50%">
 
-
 Open the rebuilt 3D scene in Blender, and append the retargeted character file.
-You can then manually add camera trajectories to render images. You should get something similar to this:
+You can then manually add camera trajectories to render images. At this point, you should be able to see something similar to the image below:
 
 <img src="assets/composed.jpg" alt="compose" width="50%" height="50%">
 
-You can also generate multi-view data easily. For example, by attaching the camera to the head bone of the characters, you can render ego-centric views. You can design different camera trajectories to render the scene from diverse views. 
+From this stage, it is easy to generate multi-view data. For example, by attaching the camera to the head bone of the characters, you can render ego-centric views. You can design different camera trajectories to render the scene from diverse views. We provide additional information on multi-view rendering in the next section. 
 
-Once you've prepared the scene, run the following command to render it:
+Once you have prepared the scene, run the following command to render it:
 ```angular2html
 bash scripts/render_indoor.sh
 ```
 
-We also support adding random fogs and randomizing textures to maximize the diversity, by setting ```--add_fog``` and ```--randomize``` in the script:
+We also support adding random fog, and randomizing textures to maximize the diversity, by setting ```--add_fog``` and ```--randomize``` in the script:
 
 <img src="assets/randomized.png" alt="random" width="50%" height="50%">
 
 ## Multi-view Data Generation
+
 The codebase supports generating multi-view data. For a quick start, run:
 ```angular2html
 bash scripts/render_outdoor_multiview.sh
@@ -116,21 +122,22 @@ bash scripts/render_outdoor_multiview.sh
 
 <img src="assets/outdoor_multiview.jpg" alt="random" width="80%" height="80%">
 
-In the above example, we render 3 views of an outdoor scene. You can also render more views by setting ```--views``` to a larger number. 
+In the example above, we render 3 views of an outdoor scene. You can also render more views by setting ```--views``` to a larger number. 
 We randomly sample camera trajectories from Mannequin Challenge dataset. You can also manually design camera trajectories to render more diverse views, or use other hand-crafted camera trajectories, by modifying the code in ```render_human.py```.
 
-For indoor scenes, we add static cameras to render multi-view images. By running:
+For indoor scenes, the following script will generate multi-view data with static cameras:
 ```angular2html
 bash scripts/render_indoor_multiview.sh
 ```
-you will get multi-view data similar to this:
+
+The rendered data should look like this:
 
 <img src="assets/indoor_multiview.jpg" alt="retar" width="60%" height="60%">
 
 ## Download
 
 The full dataset will be released soon. The dataset will include:
-* Multi-modal data (RGBs, depth maps, normal maps and segmentation masks)
+* Multi-modal data (RGB, depth, normals, instance segmentation)
 * Ground truth 2D trajectories, with visibility lables
 * Ground truth 3D trajectories
 * Camera parameters
