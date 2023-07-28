@@ -1,7 +1,10 @@
 # PointOdyssey: A Large-Scale Synthetic Dataset for Long-Term Point Tracking
 ![teaser](assets/teaser.gif)
 
-This code implements the data generation pipeline of our PointOdyssey dataset (pre-released version).
+This code implements the data generation pipeline of our PointOdyssey dataset.
+
+**[[Paper](https://arxiv.org/abs/2307.15055)] [[Project Page](https://pointodyssey.com/)]**
+
 ## Introduction
 The codebase is built upon Blender 3.1+, and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To setup the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
 ```angular2html
@@ -133,3 +136,17 @@ The full dataset will be released soon. The dataset will include:
 * Camera parameters
 
 ## Citation
+
+If you use this code for your research, please cite:
+
+**PointOdyssey: A Large-Scale Synthetic Dataset for Long-Term Point Tracking.** Yang Zheng, Adam W. Harley, Bokui Shen, Gordon Wetzstein, Leonidas J. Guibas. In ICCV 2023.
+
+Bibtex:
+```
+@inproceedings{zheng2023point,
+ author = {Yang Zheng and Adam W. Harley and Bokui Shen and Gordon Wetzstein and Leonidas J. Guibas},
+ title = {PointOdyssey: A Large-Scale Synthetic Dataset for Long-Term Point Tracking},
+ booktitle = {ICCV},
+ year = {2023}
+}
+```
