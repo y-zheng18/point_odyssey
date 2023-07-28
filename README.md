@@ -28,7 +28,7 @@ For a quick start, download the demo data [here](https://drive.google.com/file/d
 ```angular2html
 bash scripts/render_robot.sh
 ```
-You will find the rendered images in ```results/robot/```, including RGB images, depth maps, segmentation maps, and normal maps, as shown below:
+You will find the rendered images in ```results/robot/```, including RGB images, depth maps, segmentation maps, normal maps, and point trajectories:
 
 ![robot](assets/demo.gif)
 
