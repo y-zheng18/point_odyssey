@@ -136,7 +136,7 @@ The rendered data should look like this:
 
 ## Download
 
-The full dataset will be released soon. The dataset will include:
+The full dataset can be downloaded from the [project page](https://pointodyssey.com/), under [CC BY-NC-SA 4.0 license](https://creativecommons.org/licenses/by-nc-sa/4.0/). The dataset includes:
 * Multi-modal data (RGB, depth, normals, instance segmentation)
 * Ground truth 2D trajectories, with visibility lables
 * Ground truth 3D trajectories
@@ -144,7 +144,7 @@ The full dataset will be released soon. The dataset will include:
 
 ## Citation
 
-If you use this code for your research, please cite:
+If you use this code or our data for your research, please cite:
 
 **PointOdyssey: A Large-Scale Synthetic Dataset for Long-Term Point Tracking.** Yang Zheng, Adam W. Harley, Bokui Shen, Gordon Wetzstein, Leonidas J. Guibas. In ICCV 2023.
 
