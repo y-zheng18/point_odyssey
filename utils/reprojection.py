@@ -25,9 +25,8 @@ def save_to_ply(data, filename):
 
 def reprojection(points, K, RT):
     v = np.concatenate((points, np.ones((points.shape[0], 1))), axis=1)
-    model_R = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    XYZ = (RT @ model_R @ v.T).T[:, :3]
-    Z = -XYZ[:, 2:]
+    XYZ = (RT @ v.T).T[:, :3]
+    Z = XYZ[:, 2:]
     XYZ = XYZ / XYZ[:, 2:]
     xyz = (K @ XYZ.T).T
     uv = xyz[:, :2]
@@ -42,12 +41,11 @@ def inverse_projection(depth, K, RT):
 
     K_inv = np.linalg.inv(K)
 
-    # max depth is 10m
+    # use max depth as 10m for visualization
     depth = depth.flatten()
     mask = depth < 10
 
-    XYZ = K_inv @ uv_homogeneous * (-depth)
-
+    XYZ = K_inv @ uv_homogeneous * depth
 
     XYZ = np.vstack((XYZ, np.ones(XYZ.shape[1])))
     world_coordinates = np.linalg.inv(RT) @ XYZ
@@ -77,20 +75,16 @@ if __name__ == '__main__':
     cam_intrinsic = cam_ints[243]
     cam_extrinsic = cam_exts[243]
 
+    R1 = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    R2 = np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+
+    cam_extrinsic = R2 @ cam_extrinsic @ R1
+
     depth = depth_16bit.astype(np.float32) / 65535.0 * 1000.0
     depth_inv = inverse_projection(depth, cam_intrinsic, cam_extrinsic)
 
-    trajs_world = np.concatenate((trajs, np.ones((trajs.shape[0], 1))), axis=1)
-    trajs_world = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]]) @ trajs_world.T
-    trajs_world = trajs_world[:3, :].T
     save_to_ply(depth_inv, '{}/dancing/depth_inv.ply'.format(data_path))
-    save_to_ply(trajs_world, '{}/dancing/trajs.ply'.format(data_path))
-
-
-    depth_vis = depth_16bit.astype(np.float32) / 5000 * 255.0
-    depth_vis[depth_vis > 255] = 255
-    depth_vis = depth_vis.astype(np.uint8)[..., np.newaxis]
-    depth_vis = np.concatenate((depth_vis, depth_vis, depth_vis), axis=2)
+    save_to_ply(trajs, '{}/dancing/trajs.ply'.format(data_path))
 
     uv, Z = reprojection(trajs, cam_intrinsic, cam_extrinsic)
 
@@ -102,11 +96,7 @@ if __name__ == '__main__':
             d = depth[int(v), w - int(u)]
 
             if d > z - 0.15 and d < z + 0.15:
-                depth_vis[int(v), w - int(u), :] = np.array([0, 0, 255])
                 img[int(v), w - int(u), :] = np.array([255, 255, 255])
 
-            # print((u, v, z), d)
-
-    cv2.imshow('w', depth_vis)
     cv2.imshow('img', img)
     cv2.waitKey(0)
