@@ -142,6 +142,7 @@ The full dataset can be downloaded from the [project page](https://pointodyssey.
 * Ground truth 3D trajectories
 * Camera parameters
 
+Please refer to ```utils/reprojection.py``` for details on camera conventions, coordinate systems and depth scales.
 ## Citation
 
 If you use this code or our data for your research, please cite:
