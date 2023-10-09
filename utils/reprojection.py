@@ -36,7 +36,10 @@ def inverse_projection(depth, K, RT):
     h, w = depth.shape
 
     v, u = np.meshgrid(np.arange(h), np.arange(w), indexing='ij')
-    u = w - u - 1
+
+    # u = w - u - 1 # for v1.0 dataset
+
+
     uv_homogeneous = np.vstack((u.flatten(), v.flatten(), np.ones_like(u.flatten())))
 
     K_inv = np.linalg.inv(K)
@@ -59,7 +62,7 @@ def inverse_projection(depth, K, RT):
 
 if __name__ == '__main__':
     data_path = './data/point_odyssey/train'
-    annotations = np.load('{}/dancing/annotations.npz'.format(data_path))
+    annotations = np.load('{}/dancing/annot.npz'.format(data_path))
     trajs_3d = annotations['trajs_3d'].astype(np.float32)
     cam_ints = annotations['intrinsics'].astype(np.float32)
     cam_exts = annotations['extrinsics'].astype(np.float32)
@@ -75,10 +78,12 @@ if __name__ == '__main__':
     cam_intrinsic = cam_ints[243]
     cam_extrinsic = cam_exts[243]
 
-    R1 = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    R2 = np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    # this is camera transformation needed for V1.0 dataset
+    # R1 = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    # R2 = np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    #
+    # cam_extrinsic = R2 @ cam_extrinsic @ R1
 
-    cam_extrinsic = R2 @ cam_extrinsic @ R1
 
     depth = depth_16bit.astype(np.float32) / 65535.0 * 1000.0
     depth_inv = inverse_projection(depth, cam_intrinsic, cam_extrinsic)
@@ -93,10 +98,17 @@ if __name__ == '__main__':
         u, v = uv[i]
         z = Z[i]
         if 0 < u < w and 0 < v < h:
-            d = depth[int(v), w - int(u)]
+
+            # for v1.0
+            # d = depth[int(v), w - int(u)]
+            #
+            # if d > z - 0.15 and d < z + 0.15:
+            #     img[int(v), w - int(u), :] = np.array([255, 255, 255])
+
+            d = depth[int(v), int(u)]
 
             if d > z - 0.15 and d < z + 0.15:
-                img[int(v), w - int(u), :] = np.array([255, 255, 255])
+                img[int(v), int(u), :] = np.array([255, 255, 255])
 
     cv2.imshow('img', img)
     cv2.waitKey(0)
