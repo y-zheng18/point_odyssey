@@ -6,7 +6,8 @@ This code implements the data generation pipeline of our PointOdyssey dataset.
 **[[Paper](https://arxiv.org/abs/2307.15055)] [[Project Page](https://pointodyssey.com/)]**
 
 ### News
-* **Update 10/09/23**: We update the dataset and release [PointOdyssey V1.1](https://drive.google.com/drive/u/1/folders/1lMMHMXrTaFZEugD8ABScvrkmGGSqDe2f). In this version, we resolve bugs including missing masks of some sequences, and wrong ground depth. We simplify camera information, which now follows the standard perspective camera model.
+* **Update 10/09/23**: We update the dataset and release [PointOdyssey V1.1](https://drive.google.com/drive/u/1/folders/1lMMHMXrTaFZEugD8ABScvrkmGGSqDe2f). 
+In this version, we resolve bugs including missing masks of some sequences, and wrong ground depth. We simplify camera information, which now follows the standard perspective camera model.
 * **Update 09/18/23**: PIPs++ is released! Check out the [code](https://github.com/aharley/pips2) for more details.
 ## Introduction
 The codebase is built on Blender 3.1+, and tested on Blender 3.30 on Linux and 3.2.2 on MacOS. To set up the environment, first install Blender 3.1+ and then install the required python packages in your conda environment:
