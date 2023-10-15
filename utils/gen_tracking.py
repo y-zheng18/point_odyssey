@@ -3,10 +3,11 @@ import cv2
 import os
 import glob
 import matplotlib
-from utils.file_io import read_tiff
+from utils.file_io import read_tiff, write_png
 from tqdm import tqdm
 import json
 import utils.plotting as plotting
+import shutil
 
 
 def read_obj_file(obj_path:str):
@@ -34,12 +35,9 @@ def read_obj_file(obj_path:str):
 
 
 def reprojection(points: np.ndarray, K: np.ndarray, RT: np.ndarray, h: int, w: int):
-
     v = np.concatenate((points, np.ones((points.shape[0], 1))), axis=1)
-    model_R = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    XYZ = (RT @ model_R @ v.T).T[:, :3]
-    Z = -XYZ[:, 2:]
-    depth = np.linalg.norm(XYZ, axis=1)
+    XYZ = (RT @ v.T).T[:, :3]
+    Z = XYZ[:, 2:]
     XYZ = XYZ / XYZ[:, 2:]
     xyz = (K @ XYZ.T).T
     uv = xyz[:, :2]
@@ -68,74 +66,72 @@ def farthest_point_sampling(p, K):
     print('farthest point sampling done')
     return farthest_point, idx
 
-def check_visibility(uv, z, depth, h, w, depth_max, search_list, asset_mask):
-    uv[:, 0] = w - uv[:, 0]
-    # uv = np.round(uv).astype(np.int32)
-    visibility = np.zeros((uv.shape[0], 1))
-    # find nearest depth
 
 
-    for j in range(len(uv)):
-        u, v = uv[j]
-        if u < 0 or u >= w or v < 0 or v >= h:
-            visibility[j] = 0
-            # print('out of range')
-            continue
-        else:
-            ## sampling on the neighborhood
-            for delta_uv in search_list:
-                u_, v_ = np.floor(uv[j]).astype(np.int32) + delta_uv
-                if u_ < 0 or u_ >= w or v_ < 0 or v_ >= h:
-                    continue
-                if asset_mask[int(v_), int(u_)]:
-                    if not asset_mask[int(v), int(u)]:
-                        uv[j] = np.array([u_, v_])
-                        break
-
-            v_low = np.floor(uv[j, 1]).astype(np.int32)
-            v_high = np.min([np.ceil(uv[j, 1]).astype(np.int32), h - 1])
-            u_low = np.floor(uv[j, 0]).astype(np.int32)
-            u_high = np.min([np.ceil(uv[j, 0]).astype(np.int32), w - 1])
-            # find nearest depth
-            d_max = np.max(depth[v_low:v_high + 1, u_low:u_high + 1])
-            d_median = np.median(depth[v_low:v_high + 1, u_low:u_high + 1])
-            if z[j] < 0 or z[j] > depth_max:
-                visibility[j] = 2
-                # print('invalid depth')
-                continue
-            # d_rendered = depth[valid_v, valid_u]
-            if d_max >= 0.97 * z[j] and z[j] > 0.95 * d_median and z[
-                j] < 1.05 * d_median:  # and d_max - z[j] * 0.99 < d_threshold * scale:
-                visibility[j] = 1
-    return visibility
-
-
-def tracking(data_root: str, save_dir: str, tracking_index_list: list, pallette: np.array, sampling_scene_num=1000, visualize_num=2, depth_max=500, scale=1, temporal_window=10):
+def tracking(cp_root: str, data_root: str, tracking_index_list: list, pallette: np.array, sampling_scene_num=1000, depth_max=500, scale=1, temporal_window=10, frame_num=None):
     obj_root = os.path.join(data_root, 'obj')
-    img_root = os.path.join(data_root, 'images')
-    exr_root = os.path.join(args.data_root, 'exr_img')
-    cam_root = os.path.join(args.data_root, 'cam')
+    img_root = os.path.join(cp_root, 'images')
+    exr_root = os.path.join(cp_root, 'exr_img')
+    cam_root = os.path.join(cp_root, 'cam')
+    if os.path.exists(os.path.join(cp_root, 'obj')):
+        obj_root = os.path.join(cp_root, 'obj')
 
-    os.makedirs(save_dir, exist_ok=True)
+    save_rgbs_root = os.path.join(data_root, 'rgbs')
+    save_depths_root = os.path.join(data_root, 'depths')
+    save_masks_root = os.path.join(data_root, 'masks')
+    save_normals_root = os.path.join(data_root, 'normals')
+
+    os.makedirs(save_rgbs_root, exist_ok=True)
+    os.makedirs(save_depths_root, exist_ok=True)
+    os.makedirs(save_masks_root, exist_ok=True)
+    os.makedirs(save_normals_root, exist_ok=True)
+
     tracking_results = []
-    tracking_results_vis_id = []
+    tracking_results_3d = []
+    K_data = []
+    RT_data = []
     frames = sorted(glob.glob(os.path.join(img_root, '*.png')))
 
-    # sample random 3d points on the ground from (-3, -3, 0) to (3, 3, 0)
-    tracking_points = np.random.uniform(-4, 4, (sampling_scene_num, 3))
-    tracking_points[:, 1] *= 0
-    # tracking_points[sampling_num // 2:, [0, 2]] *= 10
-    tracking_points *= scale
     search_list = np.array([[0, 0], [1, 0], [0, 1], [1, 1], [0, 1], [-1, 1], [-1, -1], [1, -1], [1, 1]])
 
-    for i in tqdm(range(0, len(frames) - 1)):
+    tracking_points = np.random.uniform(-4, 4, (sampling_scene_num, 3))
+    tracking_points[:, 1] *= 0
+    tracking_points *= scale
+
+    for i in tqdm(range(0, len(frames) - 1)) if frame_num is None else tqdm(range(0, frame_num)):
         tracking_results.append([])
-        tracking_results_vis_id.append([])
-        K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i + 2).zfill(4))))
-        RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i + 2).zfill(4))))
+        tracking_results_3d.append([])
+        K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i + 1).zfill(4))))
+        RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i + 1).zfill(4))))
+        RT = R3 @ R2 @ RT @ R1
         depth = read_tiff(os.path.join(exr_root, 'depth_{}.tiff'.format(str(i + 1).zfill(5))))
         mask = cv2.imread(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5))))
         img = cv2.imread(os.path.join(exr_root, 'rgb_{}.png'.format(str(i + 1).zfill(5))))
+
+        # convert img to jpg
+        save_img_path = os.path.join(save_rgbs_root, 'rgb_{}.jpg'.format(str(i).zfill(5)))
+        cv2.imwrite(save_img_path, img)
+
+        # convert depth to 16 bit png
+        save_depth_path = os.path.join(save_depths_root, 'depth_{}.png'.format(str(i).zfill(5)))
+        max_value = 1000
+        min_value = 0
+        data = depth.copy()
+        data[data > max_value] = max_value
+        data[data < min_value] = min_value
+        data = (data - min_value) * 65535 / (max_value - min_value)
+        data = data.astype(np.uint16)
+        write_png(data, save_depth_path)
+
+        # cp normals and masks
+        save_normal_path = os.path.join(save_normals_root, 'normal_{}.jpg'.format(str(i).zfill(5)))
+        save_mask_path = os.path.join(save_masks_root, 'mask_{}.png'.format(str(i).zfill(5)))
+        save_normal = cv2.imread(os.path.join(exr_root, 'normal_{}.png'.format(str(i + 1).zfill(5))))
+        cv2.imwrite(save_normal_path, save_normal)
+
+        if os.path.exists(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5)))):
+            shutil.copy(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5))), save_mask_path)
+
         h, w, _ = img.shape
         for idx in range(len(assets)):
             asset = assets[idx]
@@ -145,47 +141,108 @@ def tracking(data_root: str, save_dir: str, tracking_index_list: list, pallette:
             asset_name = asset.replace('.', '_')
             obj_path = os.path.join(obj_root, '{}_{}.obj'.format(asset_name, str(i + 2).zfill(4)))
             obj_v, obj_f = read_obj_file(obj_path)
-            # print(obj_v.shape, tracking_idx, obj_path)
-            uv, z = reprojection(obj_v[tracking_idx], K, RT, h, w)
+            obj_v = obj_v[tracking_idx]
+            uv, z = reprojection(obj_v, K, RT, h, w)
+            visibility = np.zeros((uv.shape[0], 1))
+            # find nearest depth
             asset_mask = np.logical_and(mask[:, :, 2] == pallette[idx + 1, 0],
                                         mask[:, :, 1] == pallette[idx + 1, 1])
             asset_mask = np.logical_and(asset_mask, mask[:, :, 0] == pallette[idx + 1, 2])
-            visibility = check_visibility(uv, z, depth, h, w, depth_max, search_list, asset_mask)
+
+            for j in range(len(uv)):
+                u, v = uv[j]
+                if u < 0 or u >= w or v < 0 or v >= h:
+                    visibility[j] = 0
+                    continue
+                else:
+                    for delta_uv in search_list:
+                        u_, v_ = np.floor(uv[j]).astype(np.int32) + delta_uv
+                        if u_ < 0 or u_ >= w or v_ < 0 or v_ >= h:
+                            continue
+                        if asset_mask[int(v_), int(u_)]:
+                            if not asset_mask[int(v), int(u)]:
+                                uv[j] = np.array([u_, v_])
+                                break
+
+                    v_low = np.floor(uv[j, 1]).astype(np.int32)
+                    v_high = np.min([np.ceil(uv[j, 1]).astype(np.int32), h - 1])
+                    u_low = np.floor(uv[j, 0]).astype(np.int32)
+                    u_high = np.min([np.ceil(uv[j, 0]).astype(np.int32), w - 1])
+                    # find nearest depth
+                    d_max = np.max(depth[v_low:v_high + 1, u_low:u_high + 1])
+                    d_median = np.median(depth[v_low:v_high + 1, u_low:u_high + 1])
+                    if z[j] < 0 or z[j] > depth_max:
+                        visibility[j] = 2
+                        # print('invalid depth')
+                        continue
+                    if d_max >= 0.97 * z[j] and z[j] > 0.95 * d_median and z[j] < 1.05 * d_median: #and d_max - z[j] * 0.99 < d_threshold * scale:
+                        visibility[j] = 1
 
             tracking_results[i].append(np.concatenate((uv, visibility), axis=1))
-            tracking_results_vis_id[i].append(np.arange(visualize_num))
-            for pre_idx in range(len(tracking_results[i]) - 1):
-                tracking_results_vis_id[i][-1] += len(tracking_results[i][pre_idx]) - 1
+            tracking_results_3d[i].append(obj_v)
 
         # track ground points
         uv, z = reprojection(tracking_points, K, RT, h, w)
+        visibility = np.zeros((uv.shape[0], 1))
         # find nearest depth
         asset_mask = np.logical_and(mask[:, :, 2] == 0,
                                     mask[:, :, 1] == 0)
         asset_mask = np.logical_and(asset_mask, mask[:, :, 0] == 0)
-        visibility = check_visibility(uv, z, depth, h, w, depth_max, search_list, asset_mask)
 
+        for j in range(len(uv)):
+            u, v = uv[j]
+            if u < 0 or u >= w or v < 0 or v >= h:
+                visibility[j] = 0
+                continue
+            else:
+                ## sampling on the neighborhood
+                for delta_uv in search_list:
+                    u_, v_ = np.floor(uv[j]).astype(np.int32) + delta_uv
+                    if u_ < 0 or u_ >= w or v_ < 0 or v_ >= h:
+                        continue
+                    if asset_mask[int(v_), int(u_)]:
+                        if not asset_mask[int(v), int(u)]:
+                            uv[j] = np.array([u_, v_])
+                            break
+                v_low = np.floor(uv[j, 1]).astype(np.int32)
+                v_high = np.min([np.ceil(uv[j, 1]).astype(np.int32), h - 1])
+                u_low = np.floor(uv[j, 0]).astype(np.int32)
+                u_high = np.min([np.ceil(uv[j, 0]).astype(np.int32), w - 1])
+                # find nearest depth
+                d_max = np.max(depth[v_low:v_high + 1, u_low:u_high + 1])
+                if z[j] < 0 or z[j] > depth_max:
+                    visibility[j] = 2
+                    continue
+                if d_max >= 0.97 * z[j]:
+                    visibility[j] = 1
         tracking_results[i].append(np.concatenate((uv, visibility), axis=1))
+        tracking_results_3d[i].append(tracking_points)
 
         tracking_results[i] = np.concatenate(tracking_results[i], axis=0)
-        tracking_results_vis_id[i] = np.concatenate(tracking_results_vis_id[i], axis=0)
+        tracking_results_3d[i] = np.concatenate(tracking_results_3d[i], axis=0)
 
-        tracking_vis_id = np.linspace(0, len(tracking_results[i]) - 1, visualize_num).astype(np.int32)
-        draw_uv = tracking_results[i][tracking_vis_id]
-        visible_uv = draw_uv[draw_uv[:, 2] == 1][:, :2]
-        invisible_uv = draw_uv[draw_uv[:, 2] == 0][:, :2]
-        if len(visible_uv):
-            for u, v in visible_uv:
-                if u < 0 or u >= w - 1 or v < 0 or v >= h - 1:
-                    continue
-                cv2.circle(img, (int(u), int(v)), 2, (0, 0, 216), -1, lineType=cv2.LINE_AA)
-        if len(invisible_uv):
-            for u, v in invisible_uv:
-                if u < 0 or u >= w - 1 or v < 0 or v >= h - 1:
-                    continue
-                cv2.circle(img, (int(u), int(v)), 2, (0, 216, 0), -1, lineType=cv2.LINE_AA)
-        cv2.imwrite(os.path.join(save_dir, 'tracking_{}.png'.format(str(i + 1).zfill(4))), img)
+        K_data.append(K.astype(np.float16))
+        RT_data.append(RT.astype(np.float16))
     tracking_results = np.stack(tracking_results, axis=0)
+    tracking_results = tracking_results.astype(np.float16)
+
+    tracking_results_3d = np.stack(tracking_results_3d, axis=0)
+    tracking_results_3d = tracking_results_3d.astype(np.float16)
+
+    K_data = np.stack(K_data, axis=0)
+    K_data = K_data.astype(np.float16)
+
+    RT_data = np.stack(RT_data, axis=0)
+    RT_data = RT_data.astype(np.float16)
+
+    # save annotations as npz
+
+    np.savez(os.path.join(data_root, 'annotations.npz'),
+             trajs_2d=tracking_results[:, :, :2],
+             trajs_3d=tracking_results_3d,
+             visibilities=tracking_results[:, :, 2],
+             intrinsics=K_data,
+             extrinsics=RT_data)
 
     return tracking_results
 
@@ -198,21 +255,22 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', type=str, default='./results/robot_dome')
+    parser.add_argument('--cp_root', type=str, default='./results/robot_dome')
     parser.add_argument('--sampling_points', type=int, default=5000)
     parser.add_argument('--sampling_scene_points', type=int, default=1000)
-    parser.add_argument('--visualize_points', type=int, default=2)
     parser.add_argument('--depth_max', type=float, default=500)
     parser.add_argument('--scale', type=float, default=10)
+
+    parser.add_argument('--save_num', type=int, default=None)
     parser.add_argument('--temporal_window', type=int, default=10)
     parser.add_argument('--farthest_sampling', action='store_true', default=False)
 
     args = parser.parse_args()
-    exr_root = os.path.join(args.data_root, 'exr_img')
-    obj_root = os.path.join(args.data_root, 'obj')
-    cam_root = os.path.join(args.data_root, 'cam')
+    exr_root = os.path.join(args.cp_root, 'exr_img')
+    obj_root = os.path.join(args.cp_root, 'obj')
+    cam_root = os.path.join(args.cp_root, 'cam')
 
-    save_dir = os.path.join(args.data_root, 'tracking')
-    scene_info = json.load(open(os.path.join(args.data_root, 'scene_info.json'), 'r'))
+    scene_info = json.load(open(os.path.join(args.cp_root, 'scene_info.json'), 'r'))
     assets = scene_info['assets']
     character_name = scene_info['character'] if 'character' in scene_info.keys() else None
     character_assets = [i for i in assets if character_name in i] if character_name else []
@@ -225,8 +283,12 @@ if __name__ == '__main__':
     print(args.sampling_points // len(obj_assets))
     pallette = plotting.hls_palette(len(assets) + 2)
 
+    # transform matrix to standard perspective camera
+    R1 = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    R2 = np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    R3 = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
-    frames = sorted(glob.glob(os.path.join(args.data_root, 'images', '*.png')))
+    frames = sorted(glob.glob(os.path.join(args.cp_root, 'images', '*.png')))
 
     tracking_index_list = []
     tracking_results = []
@@ -239,25 +301,27 @@ if __name__ == '__main__':
         for i in range(0, len(frames) - 2):
             if not os.path.exists(os.path.join(obj_root, '{}_{}.obj'.format(asset_name, str(i + 2).zfill(4)))):
                 continue
-            ## only sample points when they are visible in the first frame
             initial_depth = read_tiff(os.path.join(exr_root, 'depth_{}.tiff'.format(str(i + 1).zfill(5))))
             initial_mask = cv2.imread(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5))))
             initial_rgb = cv2.imread(os.path.join(exr_root, 'rgb_{}.png'.format(str(i + 1).zfill(5))))
 
             h, w, _ = initial_depth.shape
 
-            inital_points, _ = read_obj_file(os.path.join(obj_root, '{}_{}.obj'.format(asset_name, str(i + 2).zfill(4))))
-            inital_K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i + 2).zfill(4))))
-            inital_RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i + 2).zfill(4))))
+            inital_points, _ = read_obj_file(os.path.join(obj_root, '{}_{}.obj'.format(asset_name, str(i + 1).zfill(4))))
+            inital_K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i + 1).zfill(4))))
+            inital_RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i + 1).zfill(4))))
+            inital_RT = R3 @ R2 @ inital_RT @ R1
+
+
             uv, z = reprojection(inital_points, inital_K, inital_RT, h, w)
-            uv[:, 0] = w - uv[:, 0]
+
             uv = np.round(uv).astype(np.int32)
 
             asset_mask = np.logical_and(initial_mask[:, :, 2] == pallette[idx + 1, 0],
                                         initial_mask[:, :, 1] == pallette[idx + 1, 1])
             asset_mask = np.logical_and(asset_mask, initial_mask[:, :, 0] == pallette[idx + 1, 2])
 
-            initial_depth = initial_depth #* asset_mask[:, :, None]
+            initial_depth = initial_depth
 
             uv_mask_0 = np.logical_and(np.logical_and(uv[:, 0] >= 2, uv[:, 0] < w - 3), np.logical_and(uv[:, 1] >= 2, uv[:, 1] < h - 3))[:, None]
             uv_idx_0 = np.where(uv_mask_0)[0]
@@ -265,7 +329,6 @@ if __name__ == '__main__':
                 continue
             uv = uv[uv_idx_0]
             uv_mask = z[uv_idx_0] <= initial_depth[uv[:, 1], uv[:, 0]]
-
 
             # to make sure points are not on the boundary
             for delta_u in range(-2, 3):
@@ -287,10 +350,12 @@ if __name__ == '__main__':
 
                 tracking_index = uv_idx_0[uv_idx[sample_idx]]
             if (len(uv_idx) >= 0.05 * len(inital_points) and i > len(frames) // 3) or len(uv_idx) > tracking_num:
-                print('assets: {}, frame: {}, tracking points: {}'.format(asset, i + 2, len(tracking_index)))
+                print('assets: {}, frame: {}, tracking points: {}'.format(asset, i + 1, len(tracking_index)))
                 break
         print('assets: {}, tracking points: {}'.format(asset, len(tracking_index)))
         tracking_index_list.append(tracking_index)
 
-    tracking_results = tracking(args.data_root, save_dir, tracking_index_list, pallette, args.sampling_scene_points, args.visualize_points, args.depth_max, args.scale, temporal_window=args.temporal_window)
-    np.save(os.path.join(args.data_root, 'tracking_results.npy'), tracking_results)
+
+    tracking_results = tracking(args.cp_root, args.data_root, tracking_index_list, pallette, args.sampling_scene_points,
+                                args.depth_max, args.scale, temporal_window=args.temporal_window, frame_num=args.save_num)
+

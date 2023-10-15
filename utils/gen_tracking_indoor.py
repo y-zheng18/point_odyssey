@@ -3,9 +3,10 @@ import cv2
 import os
 import glob
 import matplotlib
-from utils.file_io import read_tiff
+from utils.file_io import read_tiff, write_png
 from tqdm import tqdm
 import trimesh
+import shutil
 
 
 def read_obj_file(obj_path:str):
@@ -33,19 +34,16 @@ def read_obj_file(obj_path:str):
 
 
 def reprojection(points: np.ndarray, K: np.ndarray, RT: np.ndarray, h: int, w: int):
-
     v = np.concatenate((points, np.ones((points.shape[0], 1))), axis=1)
-    model_R = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
-    XYZ = (RT @ model_R @ v.T).T[:, :3]
-    Z = -XYZ[:, 2:]
-    depth = np.linalg.norm(XYZ, axis=1)
+    XYZ = (RT @ v.T).T[:, :3]
+    Z = XYZ[:, 2:]
     XYZ = XYZ / XYZ[:, 2:]
     xyz = (K @ XYZ.T).T
     uv = xyz[:, :2]
     return uv, Z
 
+
 def check_visibility(uv, z, depth, h, w):
-    uv[:, 0] = w - uv[:, 0]
     visibility = np.zeros((uv.shape[0], 1))
     for j in range(len(uv)):
         u, v = uv[j]
@@ -94,17 +92,37 @@ def farthest_point_sampling(p, K):
     return farthest_point, idx
 
 
-def tracking(data_root: str, sampling_scene_num=100000, sampling_character_num=5000, visualize_num=100):
-    obj_root = os.path.join(data_root, 'obj')
-    img_root = os.path.join(data_root, 'images')
-    exr_root = os.path.join(args.data_root, 'exr_img')
-    cam_root = os.path.join(args.data_root, 'cam')
+def tracking(cp_root: str, data_root: str, sampling_scene_num=100000, sampling_character_num=5000):
+    img_root = os.path.join(cp_root, 'images')
+    exr_root = os.path.join(cp_root, 'exr_img')
+    cam_root = os.path.join(cp_root, 'cam')
+    obj_root = os.path.join(cp_root, 'obj')
 
-    save_dir = os.path.join(data_root, 'tracking')
 
-    os.makedirs(save_dir, exist_ok=True)
-    tracking_results = []
+    print('copying exr data ...')
+
+    save_rgbs_root = os.path.join(data_root, 'rgbs')
+    save_depths_root = os.path.join(data_root, 'depths')
+    save_masks_root = os.path.join(data_root, 'masks')
+    save_normals_root = os.path.join(data_root, 'normals')
+
+    os.makedirs(save_rgbs_root, exist_ok=True)
+    os.makedirs(save_depths_root, exist_ok=True)
+    os.makedirs(save_masks_root, exist_ok=True)
+    os.makedirs(save_normals_root, exist_ok=True)
+
     frames = sorted(glob.glob(os.path.join(img_root, '*.png')))
+
+    # save_vis_dir = os.path.join(data_root, 'tracking')
+
+    tracking_results = []
+    tracking_results_3d = []
+    K_data = []
+    RT_data = []
+
+    R1 = np.array([[1, 0, 0, 0], [0, 0, -1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+    R2 = np.array([[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    R3 = np.array([[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
 
     scene_mesh = trimesh.load(os.path.join(obj_root, 'scene.obj'))
     scene_points = trimesh.sample.sample_surface(scene_mesh, sampling_scene_num)[0]
@@ -116,6 +134,7 @@ def tracking(data_root: str, sampling_scene_num=100000, sampling_character_num=5
     for i in tqdm(range(len(frames) // 50)):
         K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i * 50 + 1).zfill(4))))
         RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i * 50 + 1).zfill(4))))
+        RT = R3 @ R2 @ RT @ R1
         depth = read_tiff(os.path.join(exr_root, 'depth_{}.tiff'.format(str(i * 50 + 1).zfill(5))))
         h, w, _ = depth.shape
         uv, z = reprojection(scene_points, K, RT, h, w)
@@ -127,7 +146,7 @@ def tracking(data_root: str, sampling_scene_num=100000, sampling_character_num=5
     print('scene points shape', scene_points.shape)
 
     if sampling_character_num > 0:
-        c_obj, _ = read_obj_file(os.path.join(data_root, 'obj', 'character_0001.obj'))
+        c_obj, _ = read_obj_file(os.path.join(obj_root, 'character_0001.obj'))
         sampling_idx = np.random.choice(len(c_obj), sampling_character_num, replace=False if len(c_obj) > sampling_character_num else True)
     else:
         sampling_idx = None
@@ -135,42 +154,70 @@ def tracking(data_root: str, sampling_scene_num=100000, sampling_character_num=5
     for i in tqdm(range(0, len(frames) - 1)):
         K = np.loadtxt(os.path.join(cam_root, 'K_{}.txt'.format(str(i + 1).zfill(4))))
         RT = np.loadtxt(os.path.join(cam_root, 'RT_{}.txt'.format(str(i + 1).zfill(4))))
+        RT = R3 @ R2 @ RT @ R1
         depth = read_tiff(os.path.join(exr_root, 'depth_{}.tiff'.format(str(i + 1).zfill(5))))
         img = cv2.imread(os.path.join(exr_root, 'rgb_{}.png'.format(str(i + 1).zfill(5))))
         h, w, _ = img.shape
 
+        # convert img to jpg
+        save_img_path = os.path.join(save_rgbs_root, 'rgb_{}.jpg'.format(str(i).zfill(5)))
+        cv2.imwrite(save_img_path, img)
+
+        # convert depth to 16 bit png
+        save_depth_path = os.path.join(save_depths_root, 'depth_{}.png'.format(str(i).zfill(5)))
+        max_value = 1000
+        min_value = 0
+        data = depth.copy()
+        data[data > max_value] = max_value
+        data[data < min_value] = min_value
+        data = (data - min_value) * 65535 / (max_value - min_value)
+        data = data.astype(np.uint16)
+        write_png(data, save_depth_path)
+
+        # cp normals and masks
+        save_normal_path = os.path.join(save_normals_root, 'normal_{}.jpg'.format(str(i).zfill(5)))
+        save_mask_path = os.path.join(save_masks_root, 'mask_{}.png'.format(str(i).zfill(5)))
+        save_normal = cv2.imread(os.path.join(exr_root, 'normal_{}.png'.format(str(i + 1).zfill(5))))
+        cv2.imwrite(save_normal_path, save_normal)
+
+        if os.path.exists(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5)))):
+            shutil.copy(os.path.join(exr_root, 'segmentation_{}.png'.format(str(i + 1).zfill(5))), save_mask_path)
+
         uv, z = reprojection(scene_points, K, RT, h, w)
         visibility = check_visibility(uv, z, depth, h, w)
-
+        save_trajs_3d = scene_points
         if sampling_character_num > 0:
-            c_obj, _ = read_obj_file(os.path.join(data_root, 'obj', 'character_{}.obj'.format(str(i + 1).zfill(4))))
+            c_obj, _ = read_obj_file(os.path.join(obj_root, 'character_{}.obj'.format(str(i + 1).zfill(4))))
             c_obj = np.array(c_obj)[sampling_idx]
             uv_, z_ = reprojection(c_obj, K, RT, h, w)
             visibility_ = check_visibility(uv_, z_, depth, h, w)
             uv = np.concatenate([uv, uv_], axis=0)
             visibility = np.concatenate([visibility, visibility_], axis=0)
+            save_trajs_3d = np.concatenate([save_trajs_3d, c_obj], axis=0)
+
         tracking_results.append(np.concatenate((uv, visibility), axis=1).astype(np.float16))
-        if visualize_num > 0:
-            vis_idx = np.linspace(0, len(uv) - 1, visualize_num).astype(np.int32)
-            draw_uv = tracking_results[i][vis_idx]
-            visible_uv = draw_uv[draw_uv[:, 2] == 1][:, :2]
-            invisible_uv = draw_uv[draw_uv[:, 2] == 0][:, :2]
-            if len(visible_uv):
-                for u, v in visible_uv:
-                    if u < 0 or u >= w - 1 or v < 0 or v >= h - 1:
-                        continue
-                    cv2.circle(img, (int(u), int(v)), 2, (0, 0, 216), -1, lineType=cv2.LINE_AA)
-            if len(invisible_uv):
-                for u, v in invisible_uv:
-                    if u < 0 or u >= w - 1 or v < 0 or v >= h - 1:
-                        continue
-                    cv2.circle(img, (int(u), int(v)), 2, (0, 216, 0), -1, lineType=cv2.LINE_AA)
-            cv2.imwrite(os.path.join(save_dir, 'tracking_{}.png'.format(str(i + 1).zfill(4))), img)
+        tracking_results_3d.append(save_trajs_3d.astype(np.float16))
+        K_data.append(K.astype(np.float16))
+        RT_data.append(RT.astype(np.float16))
     tracking_results = np.stack(tracking_results, axis=0)
     tracking_results = tracking_results.astype(np.float16)
 
+    tracking_results_3d = np.stack(tracking_results_3d, axis=0)
+    tracking_results_3d = tracking_results_3d.astype(np.float16)
 
-    np.save(os.path.join(data_root, 'tracking_results.npy'), tracking_results)
+    K_data = np.stack(K_data, axis=0)
+    K_data = K_data.astype(np.float16)
+
+    RT_data = np.stack(RT_data, axis=0)
+    RT_data = RT_data.astype(np.float16)
+
+    # save annotations as npz
+    np.savez(os.path.join(data_root, 'annotations.npz'),
+             trajs_2d=tracking_results[:, :, :2],
+             trajs_3d=tracking_results_3d,
+             visibilities=tracking_results[:, :, 2],
+             intrinsics=K_data,
+             extrinsics=RT_data)
 
     return tracking_results
 
@@ -183,9 +230,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', type=str, default='/Users/yangzheng/code/project/long-term-tracking/data/scenes/render0')
+    parser.add_argument('--cp_root', type=str, default='/Users/yangzheng/code/project/long-term-tracking/data/scenes/render0')
     parser.add_argument('--sampling_scene_num', type=int, default=20000)
     parser.add_argument('--sampling_character_num', type=int, default=5000)
-    parser.add_argument('--visualize_num', type=int, default=10000)
     args = parser.parse_args()
 
-    tracking(args.data_root, args.sampling_scene_num, args.sampling_character_num, args.visualize_num)
+    tracking(args.cp_root, args.data_root, args.sampling_scene_num, args.sampling_character_num)

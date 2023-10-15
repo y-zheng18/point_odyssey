@@ -31,7 +31,6 @@ if __name__ == '__main__':
 
     # export tracking settings
     parser.add_argument('--export_tracking',  default=False, action='store_true')
-    parser.add_argument('--vis_num', type=int, default=0)
     parser.add_argument('--sampling_scene_num', type=int, default=20000)
     parser.add_argument('--sampling_character_num', type=int, default=5000)
     args = parser.parse_args()
@@ -63,6 +62,6 @@ if __name__ == '__main__':
             current_path, args.scene_dir, args.save_dir, not args.ignore_character)
         os.system(obj_script)
     if args.export_tracking:
-        tracking_script = 'python -m utils.gen_tracking_indoor --data_root {} --sampling_scene_num {} --sampling_character_num {} --visualize_num {}'.format(
-            args.save_dir, args.sampling_scene_num, args.sampling_character_num, args.vis_num)
+        tracking_script = 'python -m utils.gen_tracking_indoor --data_root {} --cp_root {} --sampling_scene_num {} --sampling_character_num {}'.format(
+            args.save_dir, args.save_dir, args.sampling_scene_num, args.sampling_character_num)
         os.system(tracking_script)

@@ -36,7 +36,6 @@ if __name__ == '__main__':
 
     # export tracking settings
     parser.add_argument('--export_tracking',  default=False, action='store_true')
-    parser.add_argument('--vis_num', type=int, default=1000)
     parser.add_argument('--sampling_points', type=int, default=5000)
     parser.add_argument('--sampling_scene_points', type=int, default=1000)
     args = parser.parse_args()
@@ -61,21 +60,18 @@ if __name__ == '__main__':
         if args.animal_name is not None:
             rendering_script += ' --animal_name {}'.format(args.animal_name)
         os.system(rendering_script)
-    if args.exr:
-        exr_script = 'python -m utils.openexr_utils --data_dir {} --output_dir {} --batch_size {} --frame_idx {}'.format(
-            args.output_dir, args.output_dir + '/exr_img', args.batch_size, args.frame_idx)
-        os.system(exr_script)
     if args.export_obj:
         obj_script = 'blender --background --python {}/utils/export_obj.py \
          -- --scene_root {} --output_dir {}'.format(
             current_path, os.path.join(args.output_dir, 'scene.blend'), args.output_dir)
         os.system(obj_script)
+    if args.exr:
+        exr_script = 'python -m utils.openexr_utils --data_dir {} --output_dir {} --batch_size {} --frame_idx {}'.format(
+            args.output_dir, args.output_dir + '/exr_img', args.batch_size, args.frame_idx)
+        os.system(exr_script)
     if args.export_tracking:
-        tracking_script = 'python -m utils.gen_tracking --data_root {} --sampling_points {} --visualize_points {}'.format(
-            args.output_dir, args.sampling_points, args.vis_num)
-        os.system(tracking_script)
-        tracking_script = 'python -m utils.gen_tracking_ground --data_root {} --sampling_points {} --visualize_points {}'.format(
-            args.output_dir, args.sampling_scene_points, args.vis_num)
+        tracking_script = 'python -m utils.gen_tracking --data_root {} --cp_root {} --sampling_points {} --sampling_scene_points {}'.format(
+            args.output_dir, args.output_dir, args.sampling_points, args.sampling_scene_points)
         os.system(tracking_script)
 
     # rm redundant files
