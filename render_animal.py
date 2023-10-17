@@ -38,15 +38,15 @@ def read_obj_file(obj_file_path):
         if line[0] == 'v':
             vertices.append([float(line[1]), float(line[2]), float(line[3])])  # x, y, z
         elif line[0] == 'f':  # Need to consider / case, // case, etc.
-            faces.append([int(line[3].split('/')[0]),
+            faces.append([int(line[1].split('/')[0]),
                           int(line[2].split('/')[0]),
-                          int(line[1].split('/')[0]) \
+                          int(line[3].split('/')[0]) \
                           ])  # Notice! Need to reverse back when using the face since here it would be clock-wise!
             # Convert face order from clockwise to counter-clockwise direction.
             if len(line[1].split('/')) > 1:
-                vt_f.append([int(line[3].split('/')[1]),
+                vt_f.append([int(line[1].split('/')[1]),
                            int(line[2].split('/')[1]),
-                           int(line[1].split('/')[1]) \
+                           int(line[3].split('/')[1]) \
                            ])
         elif line[0] == 'vt':
             vt.append([float(line[1]), float(line[2])])
@@ -119,9 +119,9 @@ def copy_obj(data_root, animal_name, num_seq, save_path):
             v, f, vt, vt_f = read_obj_file(os.path.join(save_path, str(idx).zfill(5) + '.obj'))
             # scale vt
 
-            vt -= 0.5
-            vt *= 5
-            vt += 0.5
+            # vt -= 0.5
+            # vt *= 5
+            # vt += 0.5
 
         for obj in obj_list:
             v, f, _, _ = read_obj_file(os.path.join(data_root, animal_sequence, 'mesh_seq', obj))
@@ -410,7 +410,7 @@ class Blender_render():
         animal_obj_savedir = os.path.join(self.scratch_dir, 'tmp')
         for animal_seq in animal_list:
             anime2obj(os.path.join(self.animal_path, animal_seq, animal_seq + '.anime'), os.path.join(animal_obj_savedir, animal_seq, 'mesh_seq'))
-        copy_obj(animal_obj_savedir, self.animal_name, 18, os.path.join(self.scratch_dir, 'tmp', 'animal_obj'))
+        copy_obj(animal_obj_savedir, self.animal_name, 15, os.path.join(self.scratch_dir, 'tmp', 'animal_obj'))
 
         # set the end frame according to the number of frames in the sequence
         bpy.context.scene.frame_end = len(os.listdir(os.path.join(self.scratch_dir, 'tmp', 'animal_obj')))
