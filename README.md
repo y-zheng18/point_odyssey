@@ -22,7 +22,7 @@ conda install -c conda-forge openexr-python
 ```
 
 The data generation pipeline also depends on some addons of Blender, including: 
-* [Rokoko Studio Live Plugin for Blender](https://www.rokoko.com/en/products/studio-live-link) (for motion retargeting)
+* [Rokoko Studio Live Plugin for Blender](https://www.rokoko.com/integrations/blender.) (for motion retargeting)
 * [SMPL-X Blender Add-on](https://smpl-x.is.tue.mpg.de/) (for human body model)
 * [Stop Motion OBJ](https://github.com/neverhood311/Stop-motion-OBJ#stop-motion-obj) (for importing mesh sequences)
 
