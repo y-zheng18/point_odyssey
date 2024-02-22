@@ -7,7 +7,7 @@ This code implements the data generation pipeline of our PointOdyssey dataset.
 
 ### News
 * **Update 02/21/24**: We released [PointOdyssey v1.2](https://drive.google.com/drive/u/1/folders/1W6wxsbKbTdtV8-2TwToqa_QgLqRY3ft0). 
-This fixes more bugs with masks and depths, and expands the dataset to a total of 159 videos (131 train, 15 val, 13 test). We also updated the dataloders in the [PIPs++ repo](https://github.com/aharley/pips2).
+This fixes more bugs with masks and depths, and expands the dataset to a total of 159 videos (131 train, 15 val, 13 test). We also updated the dataloaders in the [PIPs++ repo](https://github.com/aharley/pips2).
 * **Update 10/09/23**: We released [PointOdyssey v1.1](https://drive.google.com/drive/u/1/folders/1lMMHMXrTaFZEugD8ABScvrkmGGSqDe2f). 
 In this version, we resolve bugs including missing masks of some sequences, and wrong ground depth. We simplify camera information, which now follows the standard perspective camera model.
 * **Update 09/18/23**: PIPs++ is ready! Check out the [code](https://github.com/aharley/pips2) for more details.
