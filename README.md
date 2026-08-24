@@ -48,7 +48,7 @@ To generate outdoor data, you will need:
 * Human motion data (e.g. from [AMASS](https://amass.is.tue.mpg.de/))
 * Camera data (from [Mannequin Challenge](https://google.github.io/mannequinchallenge/www/index.html))
 * 3D models (from [PartNet](https://cs.stanford.edu/~kaichun/partnet/) and [GSO](https://research.google/resources/datasets/scanned-objects-google-research/))
-* Humanoid models (e.g., from [BlenderKit](https://www.blenderkit.com/) and [Mixamo](https://www.mixamo.com/))
+* Humanoid models (e.g., from [BlenderKit](https://www.blendkit.com/) and [Mixamo](https://www.mixamo.com/))
 
 The ```./data``` folder shows the directory structure of the required assets. To generate your customized data, you will need to download AMASS data and put it into ```./data/motions``` (e.g., ```./data/motions/CMU/01/01_01_stageii.npz```). 
 To enlarge the data diversity, you might also want to download the full dataset of GSO and PartNet.
@@ -76,7 +76,7 @@ In addition to outdoor scenes, we generate realistic indoor scenes, featuring hu
 
 We utilize mocap data from real 3D environments and rebuild the associated scenes in Blender, to support realistic interactions between humanoids and the scenes. Specifically, we use:
 * Human motions and 3D scene scans from [Egobody](https://sanweiliti.github.io/egobody/egobody.html) and [GIMO](https://github.com/y-zheng18/GIMO)
-* 3D furniture models from [BlenderKit](https://www.blenderkit.com/) and [3D-front](https://tianchi.aliyun.com/specials/promotion/alibaba-3d-scene-dataset)
+* 3D furniture models from [BlenderKit](https://www.blendkit.com/) and [3D-front](https://tianchi.aliyun.com/specials/promotion/alibaba-3d-scene-dataset)
 * Virtual humans from [Mixamo](https://www.mixamo.com/) and [Turbosquid](https://www.turbosquid.com/)
 
 In our case, the first step is to rebuild 3D scenes using the downloaded 3D furniture, to replicate specific 3D environments from the real scans.
@@ -84,7 +84,7 @@ Since the human motions from Egobody and GIMO are initially aligned with the sce
 In the next section, we show how to make your own data based on EgoBody dataset and characters from Mixamo.
 
 ### Rebuilding 3D Scenes
-To rebuild 3D scenes, you can use [BlenderKit](https://www.blenderkit.com/) to import 3D furniture in Blender to match the layout of 3D scans:
+To rebuild 3D scenes, you can use [BlenderKit](https://www.blendkit.com/) to import 3D furniture in Blender to match the layout of 3D scans:
 
 ![rebuild](assets/rebuilt.jpg)
 
